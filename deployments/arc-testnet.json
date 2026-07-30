@@ -1,0 +1,9 @@
+{
+  "network": "Arc Testnet",
+  "chainId": 5042002,
+  "contractName": "EduFlowAgreement",
+  "contractAddress": "YOUR_CONTRACT_ADDRESS",
+  "usdcAddress": "0x3600000000000000000000000000000000000000",
+  "explorerUrl": "https://testnet.arcscan.app/address/YOUR_CONTRACT_ADDRESS"
+}
+
