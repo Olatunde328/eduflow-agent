@@ -1,67 +1,155 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+﻿import { useEffect, useState } from "react";
+import {
+  Bot,
+  CircleDollarSign,
+  LockKeyhole,
+  ScanSearch,
+} from "lucide-react";
+import Header from "./components/Header";
+import AgreementCard from "./components/AgreementCard";
+import EvidenceForm from "./components/EvidenceForm";
+import DecisionReceipt from "./components/DecisionReceipt";
+import { evaluateMilestone, getDemoAgreement } from "./services/api";
 import "./App.css";
 
 function App() {
-  const [apiStatus, setApiStatus] = useState({
-    loading: true,
-    online: false,
-    message: "Checking EduFlow API...",
-  });
+  const [agreement, setAgreement] = useState(null);
+  const [decisionResult, setDecisionResult] = useState(null);
+  const [apiOnline, setApiOnline] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [evaluating, setEvaluating] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    const checkApi = async () => {
+    async function loadAgreement() {
       try {
-        const response = await axios.get("http://localhost:5000/api/health");
-
-        setApiStatus({
-          loading: false,
-          online: response.data.success,
-          message: `${response.data.service} is online`,
-        });
-      } catch (error) {
-        console.error("API connection failed:", error);
-
-        setApiStatus({
-          loading: false,
-          online: false,
-          message: "EduFlow API is offline",
-        });
+        const data = await getDemoAgreement();
+        setAgreement(data);
+        setApiOnline(true);
+      } catch (requestError) {
+        console.error(requestError);
+        setApiOnline(false);
+        setError(
+          "Unable to connect to the EduFlow API. Confirm the backend is running on port 5000.",
+        );
+      } finally {
+        setLoading(false);
       }
-    };
+    }
 
-    checkApi();
+    loadAgreement();
   }, []);
 
+  const handleEvaluate = async (evidence) => {
+    setEvaluating(true);
+    setError("");
+    setDecisionResult(null);
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      const result = await evaluateMilestone(evidence);
+      setDecisionResult(result);
+      setApiOnline(true);
+    } catch (requestError) {
+      console.error(requestError);
+      setError(
+        requestError.response?.data?.error ||
+          "The SkillPay Agent could not evaluate this evidence.",
+      );
+    } finally {
+      setEvaluating(false);
+    }
+  };
+
   return (
-    <main className="app-shell">
-      <section className="hero-card">
-        <div className="brand-badge">EduFlow Agent</div>
+    <div className="app-shell">
+      <Header apiOnline={apiOnline} />
 
-        <h1>Verified learning. Autonomous USDC payments.</h1>
-
-        <p className="hero-copy">
-          EduFlow uses policy-controlled agents to verify learning milestones
-          and release authorized USDC payments on Arc.
-        </p>
-
-        <div className={`status-card ${apiStatus.online ? "online" : "offline"}`}>
-          <span className="status-dot" />
-
+      <main className="dashboard">
+        <section className="hero-section">
           <div>
-            <strong>
-              {apiStatus.loading ? "Connecting..." : apiStatus.message}
-            </strong>
+            <span className="hero-label">Agentic learning commerce on Arc</span>
+
+            <h1>
+              Verified learning.
+              <br />
+              Autonomous USDC payments.
+            </h1>
 
             <p>
-              {apiStatus.online
-                ? "Frontend and backend are communicating successfully."
-                : "Start the Express server on port 5000."}
+              EduFlow gives a bounded economic agent permission to evaluate
+              learning evidence and release payments only when every
+              payer-defined condition is satisfied.
             </p>
           </div>
-        </div>
-      </section>
-    </main>
+
+          <div className="hero-stat">
+            <span>Authorized demo budget</span>
+            <strong>{agreement?.totalBudget || 30} USDC</strong>
+            <small>Protected by programmable spending policies</small>
+          </div>
+        </section>
+
+        <section className="trust-grid">
+          <article>
+            <ScanSearch size={22} />
+            <div>
+              <strong>Evidence-aware decisions</strong>
+              <span>Lesson duration, confirmation, and outcomes are checked.</span>
+            </div>
+          </article>
+
+          <article>
+            <CircleDollarSign size={22} />
+            <div>
+              <strong>Automatic USDC settlement</strong>
+              <span>Approved milestones can trigger payment execution.</span>
+            </div>
+          </article>
+
+          <article>
+            <LockKeyhole size={22} />
+            <div>
+              <strong>Bounded spending authority</strong>
+              <span>The agent cannot exceed the payer's approved policy.</span>
+            </div>
+          </article>
+        </section>
+
+        {evaluating && (
+          <div className="agent-running-banner">
+            <Bot size={19} />
+            <div>
+              <strong>SkillPay Agent is evaluating the evidence</strong>
+              <span>Checking learning requirements and spending policy...</span>
+            </div>
+            <div className="agent-loader" />
+          </div>
+        )}
+
+        {error && <div className="error-banner">{error}</div>}
+
+        {loading ? (
+          <section className="panel loading-panel">
+            Loading EduFlow workspace...
+          </section>
+        ) : (
+          <>
+            <div className="dashboard-grid">
+              <AgreementCard agreement={agreement} />
+
+              <EvidenceForm
+                agreement={agreement}
+                onEvaluate={handleEvaluate}
+                evaluating={evaluating}
+              />
+            </div>
+
+            <DecisionReceipt result={decisionResult} />
+          </>
+        )}
+      </main>
+    </div>
   );
 }
 
