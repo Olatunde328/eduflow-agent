@@ -18,6 +18,7 @@
   "author": "Olatunde Olagoke",
   "license": "MIT",
   "dependencies": {
+    "@circle-fin/developer-controlled-wallets": "^10.8.0",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
