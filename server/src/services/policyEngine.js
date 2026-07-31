@@ -1,9 +1,9 @@
-const DECISIONS = {
+export const DECISIONS = Object.freeze({
   PAY: "PAY",
   HOLD: "HOLD",
   ESCALATE: "ESCALATE",
-  REJECT: "REJECT"
-};
+  REJECT: "REJECT",
+});
 
 function createCheck(rule, passed, observed, required, reason) {
   return {
@@ -11,222 +11,230 @@ function createCheck(rule, passed, observed, required, reason) {
     passed,
     observed,
     required,
-    reason
+    reason,
   };
 }
 
-export function evaluateLearningMilestone({ agreement, milestone, evidence }) {
+function result(decision, authorizedAmount, checks, explanation) {
+  return {
+    decision,
+    authorizedAmount,
+    checks,
+    explanation,
+    evaluator: "deterministic-policy-engine-v1",
+  };
+}
+
+export function evaluateLearningMilestone({
+  agreement,
+  milestone,
+  evidence,
+}) {
   const checks = [];
 
   if (agreement.status !== "ACTIVE") {
-    return {
-      decision: DECISIONS.REJECT,
-      authorizedAmount: 0,
-      checks: [
+    return result(
+      DECISIONS.REJECT,
+      0,
+      [
         createCheck(
           "agreementStatus",
           false,
           agreement.status,
           "ACTIVE",
-          "The learning agreement is not active."
-        )
+          "The learning agreement is not active.",
+        ),
       ],
-      explanation: "Payment rejected because the agreement is not active.",
-      evaluator: "deterministic-rules-engine"
-    };
+      "Payment rejected because the agreement is not active.",
+    );
   }
 
   const now = new Date();
   const expiresAt = new Date(agreement.expiresAt);
 
-  if (now > expiresAt) {
-    return {
-      decision: DECISIONS.REJECT,
-      authorizedAmount: 0,
-      checks: [
+  if (Number.isNaN(expiresAt.getTime()) || now > expiresAt) {
+    return result(
+      DECISIONS.REJECT,
+      0,
+      [
         createCheck(
           "agreementExpiry",
           false,
           now.toISOString(),
           agreement.expiresAt,
-          "The agreement has expired."
-        )
+          "The learning agreement has expired.",
+        ),
       ],
-      explanation: "Payment rejected because the agreement has expired.",
-      evaluator: "deterministic-rules-engine"
-    };
+      "Payment rejected because the agreement has expired.",
+    );
   }
 
   if (!milestone) {
-    return {
-      decision: DECISIONS.REJECT,
-      authorizedAmount: 0,
-      checks: [
+    return result(
+      DECISIONS.REJECT,
+      0,
+      [
         createCheck(
           "milestoneExists",
           false,
           "Not found",
-          "Valid milestone",
-          "The supplied milestone does not exist."
-        )
+          "Existing milestone",
+          "The supplied milestone does not exist.",
+        ),
       ],
-      explanation: "Payment rejected because the milestone was not found.",
-      evaluator: "deterministic-rules-engine"
-    };
+      "Payment rejected because the milestone was not found.",
+    );
   }
 
-  if (milestone.paid) {
-    return {
-      decision: DECISIONS.REJECT,
-      authorizedAmount: 0,
-      checks: [
+  if (milestone.paid || milestone.status === "PAID") {
+    return result(
+      DECISIONS.REJECT,
+      0,
+      [
         createCheck(
           "duplicatePayment",
           false,
           "Already paid",
           "Unpaid milestone",
-          "This milestone has already been paid."
-        )
+          "Duplicate milestone payments are not permitted.",
+        ),
       ],
-      explanation: "Payment rejected because duplicate milestone payments are not allowed.",
-      evaluator: "deterministic-rules-engine"
-    };
+      "Payment rejected because this milestone has already been paid.",
+    );
+  }
+
+  if (milestone.status === "PROCESSING") {
+    return result(
+      DECISIONS.HOLD,
+      0,
+      [
+        createCheck(
+          "paymentInProgress",
+          false,
+          "PROCESSING",
+          "PENDING",
+          "A payment transaction is already being processed.",
+        ),
+      ],
+      "Payment is on hold while the existing transaction is processed.",
+    );
   }
 
   const requestedAmount = Number(evidence.requestedAmount);
+  const duration = Number(evidence.durationMinutes);
+  const assessmentScore = Number(evidence.assessmentScore);
+
+  const durationPassed =
+    duration >= agreement.minimumDurationMinutes;
+
+  const learnerConfirmationPassed =
+    !agreement.requiresLearnerConfirmation ||
+    evidence.learnerConfirmed === true;
+
+  const assessmentPassed =
+    assessmentScore >= agreement.minimumAssessmentScore;
+
+  const milestoneAmountPassed =
+    requestedAmount <= agreement.amountPerMilestone;
+
+  const autoPayPassed =
+    requestedAmount <= agreement.autoPayLimit;
+
+  const budgetPassed =
+    requestedAmount <= agreement.remainingBudget;
 
   checks.push(
     createCheck(
       "minimumDuration",
-      Number(evidence.durationMinutes) >= agreement.minimumDurationMinutes,
-      `${evidence.durationMinutes} minutes`,
+      durationPassed,
+      `${duration} minutes`,
       `${agreement.minimumDurationMinutes} minutes`,
-      Number(evidence.durationMinutes) >= agreement.minimumDurationMinutes
+      durationPassed
         ? "The lesson duration requirement was satisfied."
-        : "The lesson duration is below the required minimum."
-    )
-  );
-
-  checks.push(
+        : "The lesson duration is below the required minimum.",
+    ),
     createCheck(
       "learnerConfirmation",
-      agreement.requiresLearnerConfirmation
-        ? evidence.learnerConfirmed === true
-        : true,
+      learnerConfirmationPassed,
       evidence.learnerConfirmed ? "Confirmed" : "Not confirmed",
-      agreement.requiresLearnerConfirmation ? "Required" : "Optional",
-      !agreement.requiresLearnerConfirmation || evidence.learnerConfirmed
+      agreement.requiresLearnerConfirmation
+        ? "Required"
+        : "Optional",
+      learnerConfirmationPassed
         ? "The learner confirmation requirement was satisfied."
-        : "Learner confirmation is still required."
-    )
-  );
-
-  checks.push(
+        : "Learner confirmation is still required.",
+    ),
     createCheck(
       "assessmentScore",
-      Number(evidence.assessmentScore) >= agreement.minimumAssessmentScore,
-      `${evidence.assessmentScore}%`,
+      assessmentPassed,
+      `${assessmentScore}%`,
       `${agreement.minimumAssessmentScore}%`,
-      Number(evidence.assessmentScore) >= agreement.minimumAssessmentScore
+      assessmentPassed
         ? "The assessment threshold was satisfied."
-        : "The assessment score is below the required threshold."
-    )
-  );
-
-  checks.push(
+        : "The assessment score is below the required threshold.",
+    ),
     createCheck(
       "milestoneAmount",
-      requestedAmount <= agreement.amountPerMilestone,
+      milestoneAmountPassed,
       `${requestedAmount} USDC`,
       `Maximum ${agreement.amountPerMilestone} USDC`,
-      requestedAmount <= agreement.amountPerMilestone
-        ? "The requested amount is within the milestone limit."
-        : "The requested amount exceeds the milestone limit."
-    )
-  );
-
-  checks.push(
+      milestoneAmountPassed
+        ? "The request is within the milestone payment limit."
+        : "The request exceeds the milestone payment limit.",
+    ),
     createCheck(
       "autoPayLimit",
-      requestedAmount <= agreement.autoPayLimit,
+      autoPayPassed,
       `${requestedAmount} USDC`,
       `Maximum ${agreement.autoPayLimit} USDC`,
-      requestedAmount <= agreement.autoPayLimit
-        ? "The requested amount is within the automatic payment limit."
-        : "The request exceeds the agent's automatic payment authority."
-    )
-  );
-
-  checks.push(
+      autoPayPassed
+        ? "The request is within the agent's automatic authority."
+        : "The request requires human approval.",
+    ),
     createCheck(
       "remainingBudget",
-      requestedAmount <= agreement.remainingBudget,
+      budgetPassed,
       `${requestedAmount} USDC requested`,
       `${agreement.remainingBudget} USDC remaining`,
-      requestedAmount <= agreement.remainingBudget
-        ? "The agreement has enough remaining budget."
-        : "The request exceeds the remaining agreement budget."
-    )
+      budgetPassed
+        ? "The agreement has sufficient remaining budget."
+        : "The request exceeds the remaining agreement budget.",
+    ),
   );
 
-  const amountViolation =
-    requestedAmount > agreement.amountPerMilestone ||
-    requestedAmount > agreement.remainingBudget;
-
-  if (amountViolation) {
-    return {
-      decision: DECISIONS.REJECT,
-      authorizedAmount: 0,
+  if (!milestoneAmountPassed || !budgetPassed) {
+    return result(
+      DECISIONS.REJECT,
+      0,
       checks,
-      explanation:
-        "Payment rejected because the requested amount violates the authorized spending policy.",
-      evaluator: "deterministic-rules-engine"
-    };
+      "Payment rejected because the requested amount violates the authorized spending policy.",
+    );
   }
 
-  if (requestedAmount > agreement.autoPayLimit) {
-    return {
-      decision: DECISIONS.ESCALATE,
-      authorizedAmount: 0,
+  if (!durationPassed || !learnerConfirmationPassed) {
+    return result(
+      DECISIONS.HOLD,
+      0,
       checks,
-      explanation:
-        "Human approval is required because the requested amount exceeds the agent's automatic payment authority.",
-      evaluator: "deterministic-rules-engine"
-    };
+      "Payment is on hold because required lesson evidence is incomplete.",
+    );
   }
 
-  const missingEvidence =
-    !evidence.learnerConfirmed ||
-    Number(evidence.durationMinutes) < agreement.minimumDurationMinutes;
-
-  if (missingEvidence) {
-    return {
-      decision: DECISIONS.HOLD,
-      authorizedAmount: 0,
+  if (!assessmentPassed || !autoPayPassed) {
+    return result(
+      DECISIONS.ESCALATE,
+      0,
       checks,
-      explanation:
-        "Payment is on hold because required lesson evidence is incomplete.",
-      evaluator: "deterministic-rules-engine"
-    };
+      !assessmentPassed
+        ? "Human review is required because the learning outcome threshold was not satisfied."
+        : "Human approval is required because the amount exceeds the agent's automatic authority.",
+    );
   }
 
-  if (Number(evidence.assessmentScore) < agreement.minimumAssessmentScore) {
-    return {
-      decision: DECISIONS.ESCALATE,
-      authorizedAmount: 0,
-      checks,
-      explanation:
-        "Human review is required because the learning outcome threshold was not satisfied.",
-      evaluator: "deterministic-rules-engine"
-    };
-  }
-
-  return {
-    decision: DECISIONS.PAY,
-    authorizedAmount: requestedAmount,
+  return result(
+    DECISIONS.PAY,
+    requestedAmount,
     checks,
-    explanation:
-      "All learning evidence and spending-policy conditions were satisfied.",
-    evaluator: "deterministic-rules-engine"
-  };
+    "All learning evidence and spending-policy conditions were satisfied.",
+  );
 }

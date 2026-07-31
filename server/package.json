@@ -1,19 +1,21 @@
 {
   "name": "server",
   "version": "1.0.0",
-  "description": "EduFlow Agent Backend API",
+  "description": "EduFlow Agent backend for policy-controlled USDC payments on Arc",
   "type": "module",
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "check": "node --check src/index.js && node --check src/routes/agreements.js && node --check src/services/policyEngine.js && node --check src/services/circlePaymentService.js",
+    "test:policy": "node scripts/test-policy-engine.js"
   },
   "keywords": [
     "eduflow",
     "arc",
     "circle",
     "usdc",
-    "express"
+    "agentic-payments"
   ],
   "author": "Olatunde Olagoke",
   "license": "MIT",
