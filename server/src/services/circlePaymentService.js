@@ -1,10 +1,10 @@
 import "dotenv/config";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash } from "node:crypto";
 import {
   initiateDeveloperControlledWalletsClient,
 } from "@circle-fin/developer-controlled-wallets";
 
-const TERMINAL_STATES = new Set([
+const FINAL_STATES = new Set([
   "COMPLETE",
   "FAILED",
   "DENIED",
@@ -34,7 +34,7 @@ function requireAddress(name, value) {
   return value;
 }
 
-function bytes32(value) {
+function toBytes32(value) {
   return `0x${createHash("sha256")
     .update(String(value))
     .digest("hex")}`;
@@ -43,10 +43,7 @@ function bytes32(value) {
 function toUsdcBaseUnits(amount) {
   const numericAmount = Number(amount);
 
-  if (
-    !Number.isFinite(numericAmount) ||
-    numericAmount <= 0
-  ) {
+  if (!Number.isFinite(numericAmount) || numericAmount <= 0) {
     throw new Error("Payment amount must be a positive number.");
   }
 
@@ -59,7 +56,7 @@ function toUsdcBaseUnits(amount) {
   return String(baseUnits);
 }
 
-function buildClient() {
+function createCircleClient() {
   return initiateDeveloperControlledWalletsClient({
     apiKey: requireEnvironment("CIRCLE_API_KEY"),
     entitySecret: requireEnvironment("CIRCLE_ENTITY_SECRET"),
@@ -67,22 +64,26 @@ function buildClient() {
 }
 
 function normalizeTransaction(transaction) {
-  const hash =
+  const transactionHash =
     transaction?.txHash ??
     transaction?.transactionHash ??
     null;
 
   return {
     id: transaction?.id ?? null,
+    transactionId: transaction?.id ?? null,
     state: transaction?.state ?? "UNKNOWN",
     operation: transaction?.operation ?? null,
-    transactionHash: hash,
-    explorerUrl: hash
-      ? `https://testnet.arcscan.app/tx/${hash}`
+    transactionHash,
+    explorerUrl: transactionHash
+      ? `https://testnet.arcscan.app/tx/${transactionHash}`
       : null,
     createDate: transaction?.createDate ?? null,
     updateDate: transaction?.updateDate ?? null,
-    errorReason: transaction?.errorReason ?? null,
+    errorReason:
+      transaction?.errorReason ??
+      transaction?.errorDetails ??
+      null,
   };
 }
 
@@ -94,6 +95,7 @@ export async function getCircleTransaction(transactionId) {
       transactionId,
     )}`,
     {
+      method: "GET",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
@@ -104,38 +106,42 @@ export async function getCircleTransaction(transactionId) {
   const body = await response.json();
 
   if (!response.ok) {
-    const message =
+    throw new Error(
       body?.message ??
-      `Circle transaction lookup failed with status ${response.status}`;
-
-    throw new Error(message);
+        body?.error ??
+        `Circle lookup failed with status ${response.status}`,
+    );
   }
 
-  return normalizeTransaction(body.data?.transaction ?? body.data);
+  return normalizeTransaction(
+    body.data?.transaction ?? body.data,
+  );
 }
 
 export async function waitForCircleTransaction(
   transactionId,
   {
-    timeoutMs = 45_000,
+    timeoutMs = 60_000,
     intervalMs = 2_500,
   } = {},
 ) {
   const startedAt = Date.now();
-  let latest = await getCircleTransaction(transactionId);
+  let transaction =
+    await getCircleTransaction(transactionId);
 
   while (
-    !TERMINAL_STATES.has(latest.state) &&
+    !FINAL_STATES.has(transaction.state) &&
     Date.now() - startedAt < timeoutMs
   ) {
     await new Promise((resolve) =>
       setTimeout(resolve, intervalMs),
     );
 
-    latest = await getCircleTransaction(transactionId);
+    transaction =
+      await getCircleTransaction(transactionId);
   }
 
-  return latest;
+  return transaction;
 }
 
 export async function executeMilestonePayment({
@@ -144,8 +150,9 @@ export async function executeMilestonePayment({
   amount,
   evidence,
 }) {
-  const walletId = requireEnvironment(
-    "CIRCLE_EXECUTOR_WALLET_ID",
+  const executorAddress = requireAddress(
+    "CIRCLE_EXECUTOR_ADDRESS",
+    requireEnvironment("CIRCLE_EXECUTOR_ADDRESS"),
   );
 
   const contractAddress = requireAddress(
@@ -153,13 +160,11 @@ export async function executeMilestonePayment({
     requireEnvironment("EDUFLOW_CONTRACT_ADDRESS"),
   );
 
-  const client = buildClient();
-
-  const milestoneIdHash = bytes32(
+  const milestoneIdHash = toBytes32(
     `${agreementId}:${milestoneId}`,
   );
 
-  const evidenceHash = bytes32(
+  const evidenceHash = toBytes32(
     JSON.stringify({
       agreementId,
       milestoneId,
@@ -171,12 +176,21 @@ export async function executeMilestonePayment({
     }),
   );
 
-  const idempotencyKey = randomUUID();
+  const client = createCircleClient();
+
+  console.log("");
+  console.log("Submitting Circle contract execution");
+  console.log("------------------------------------");
+  console.log("Executor:", executorAddress);
+  console.log("Contract:", contractAddress);
+  console.log("Agreement:", agreementId);
+  console.log("Milestone:", milestoneId);
+  console.log("Amount:", amount, "USDC");
 
   const response =
     await client.createContractExecutionTransaction({
-      idempotencyKey,
-      walletId,
+      walletAddress: executorAddress,
+      blockchain: "ARC-TESTNET",
       contractAddress,
       abiFunctionSignature:
         "releaseMilestone(uint256,bytes32,uint256,bytes32)",
@@ -186,31 +200,49 @@ export async function executeMilestonePayment({
         toUsdcBaseUnits(amount),
         evidenceHash,
       ],
-      feeLevel: "MEDIUM",
-      refId: `eduflow-${milestoneId}-${Date.now()}`,
+      fee: {
+        type: "level",
+        config: {
+          feeLevel: "MEDIUM",
+        },
+      },
     });
 
-  const transactionId = response.data?.id;
+  const transactionId =
+    response.data?.id ??
+    response.data?.transactionId;
 
   if (!transactionId) {
+    console.error(
+      "Unexpected Circle response:",
+      JSON.stringify(response.data, null, 2),
+    );
+
     throw new Error(
-      "Circle accepted the request but returned no transaction ID.",
+      "Circle accepted no transaction ID.",
     );
   }
 
-  const transaction = await waitForCircleTransaction(
-    transactionId,
-  );
+  console.log("Circle transaction ID:", transactionId);
+
+  const transaction =
+    await waitForCircleTransaction(transactionId);
+
+  console.log("Circle transaction state:", transaction.state);
+
+  if (transaction.transactionHash) {
+    console.log(
+      "Arc transaction hash:",
+      transaction.transactionHash,
+    );
+  }
 
   return {
+    ...transaction,
     transactionId,
-    idempotencyKey,
     milestoneIdHash,
     evidenceHash,
-    submittedBy: requireEnvironment(
-      "CIRCLE_EXECUTOR_ADDRESS",
-    ),
-    ...transaction,
+    submittedBy: executorAddress,
     successful: SUCCESS_STATES.has(transaction.state),
   };
 }
