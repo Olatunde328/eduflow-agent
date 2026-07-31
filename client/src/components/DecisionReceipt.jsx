@@ -1,77 +1,46 @@
-﻿import {
+import {
   AlertTriangle,
+  Check,
   CheckCircle2,
   Clock3,
   ExternalLink,
-  FileCheck2,
-  ScanSearch,
-  ShieldAlert,
-  WalletCards,
-  XCircle,
+  ReceiptText,
+  ShieldX,
+  X,
 } from "lucide-react";
+import StatusBadge from "./StatusBadge";
 
-const decisionConfig = {
-  PAY: {
-    icon: CheckCircle2,
-    title: "Payment authorized",
-    description: "All learning and spending conditions passed.",
-  },
-  HOLD: {
-    icon: Clock3,
-    title: "Payment on hold",
-    description: "Required evidence is incomplete.",
-  },
-  ESCALATE: {
-    icon: AlertTriangle,
-    title: "Human review required",
-    description: "The request exceeds the agent's authority.",
-  },
-  REJECT: {
-    icon: XCircle,
-    title: "Payment rejected",
-    description: "The request violates the authorized policy.",
-  },
+const decisionIcons = {
+  PAY: CheckCircle2,
+  HOLD: Clock3,
+  ESCALATE: AlertTriangle,
+  REJECT: ShieldX,
 };
+
+function shorten(value, start = 12, end = 8) {
+  if (!value) return "Pending";
+  return `${value.slice(0, start)}…${value.slice(-end)}`;
+}
 
 function DecisionReceipt({ result }) {
   if (!result) {
     return (
       <section className="panel receipt-empty">
-        <ShieldAlert size={34} />
-
-        <h2>How SkillPay works</h2>
-
+        <ReceiptText size={34} />
+        <h2>Decision receipt</h2>
         <p>
-          Every payment passes through evidence verification, policy checks,
-          and a bounded payment decision.
+          Evaluate lesson evidence to see the policy result, or execute an
+          approved payment to receive a Circle and Arc transaction receipt.
         </p>
-
-        <div className="how-it-works">
-          <div>
-            <FileCheck2 size={22} />
-            <span>1</span>
-            <strong>Evidence submitted</strong>
-          </div>
-
-          <div>
-            <ScanSearch size={22} />
-            <span>2</span>
-            <strong>Agent evaluates rules</strong>
-          </div>
-
-          <div>
-            <WalletCards size={22} />
-            <span>3</span>
-            <strong>USDC authorized or blocked</strong>
-          </div>
-        </div>
       </section>
     );
   }
 
   const decision = result.decision;
-  const config = decisionConfig[decision.decision] || decisionConfig.HOLD;
-  const DecisionIcon = config.icon;
+  const Icon =
+    decisionIcons[decision.decision] ?? AlertTriangle;
+
+  const transaction = result.transaction;
 
   return (
     <section
@@ -79,90 +48,125 @@ function DecisionReceipt({ result }) {
     >
       <div className="receipt-header">
         <div className="decision-icon">
-          <DecisionIcon size={30} />
+          <Icon size={27} />
         </div>
 
         <div>
-          <span className="eyebrow">Proof-of-learning decision receipt</span>
-          <h2>{config.title}</h2>
-          <p>{config.description}</p>
+          <span className="eyebrow">
+            SkillPay policy receipt
+          </span>
+          <h2>{decision.decision}</h2>
+          <p>{decision.explanation}</p>
         </div>
 
         <div className="decision-amount">
           <span>Authorized</span>
-          <strong>{decision.authorizedAmount} USDC</strong>
+          <strong>
+            {decision.authorizedAmount || 0} USDC
+          </strong>
         </div>
       </div>
 
       <div className="agent-sequence">
-        <div className="sequence-step complete">
-          <CheckCircle2 size={17} />
-          <span>Evidence received</span>
-        </div>
+        <span className="sequence-step complete">
+          <Check size={15} />
+          Evidence
+        </span>
 
-        <div className="sequence-line" />
+        <span className="sequence-line" />
 
-        <div className="sequence-step complete">
-          <CheckCircle2 size={17} />
-          <span>Policy evaluated</span>
-        </div>
+        <span className="sequence-step complete">
+          <Check size={15} />
+          Policy
+        </span>
 
-        <div className="sequence-line" />
+        <span className="sequence-line" />
 
-        <div
+        <span
           className={`sequence-step ${
-            decision.decision === "PAY" ? "complete" : "blocked"
+            result.paymentSubmitted
+              ? "complete"
+              : "blocked"
           }`}
         >
-          {decision.decision === "PAY" ? (
-            <CheckCircle2 size={17} />
+          {result.paymentSubmitted ? (
+            <Check size={15} />
           ) : (
-            <XCircle size={17} />
+            <X size={15} />
           )}
-          <span>
-            {decision.decision === "PAY"
-              ? "Payment authorized"
-              : "Payment prevented"}
-          </span>
-        </div>
-      </div>
-
-      <div className="decision-summary">
-        <strong>Agent explanation</strong>
-        <p>{decision.explanation}</p>
+          Settlement
+        </span>
       </div>
 
       <div className="checks-list">
         {decision.checks.map((check) => (
           <article
+            className={`check-row ${
+              check.passed ? "passed" : "failed"
+            }`}
             key={check.rule}
-            className={`check-row ${check.passed ? "passed" : "failed"}`}
           >
             <div className="check-icon">
               {check.passed ? (
                 <CheckCircle2 size={19} />
               ) : (
-                <XCircle size={19} />
+                <X size={19} />
               )}
             </div>
 
             <div className="check-main">
-              <strong>{formatRule(check.rule)}</strong>
+              <strong>{check.rule}</strong>
               <p>{check.reason}</p>
             </div>
 
             <div className="check-values">
               <span>{check.observed}</span>
-              <small>Required: {check.required}</small>
+              <small>{check.required}</small>
             </div>
           </article>
         ))}
       </div>
 
+      {transaction && (
+        <div className="transaction-card">
+          <div>
+            <span>Circle transaction state</span>
+            <StatusBadge status={transaction.state} />
+          </div>
+
+          <div>
+            <span>Transaction ID</span>
+            <strong>
+              {shorten(transaction.transactionId || transaction.id)}
+            </strong>
+          </div>
+
+          <div>
+            <span>Arc transaction hash</span>
+            <strong>
+              {shorten(transaction.transactionHash)}
+            </strong>
+          </div>
+
+          {transaction.explorerUrl && (
+            <a
+              href={transaction.explorerUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open Arc receipt
+              <ExternalLink size={15} />
+            </a>
+          )}
+        </div>
+      )}
+
       <div className="receipt-footer">
         <div>
-          <span>Evaluator</span>
-          <strong>{decision.evaluator}</strong>
+          <span>Agreement</span>
+          <strong>
+            #{result.onchainAgreementId ?? "—"}
+          </strong>
         </div>
 
         <div>
@@ -171,23 +175,12 @@ function DecisionReceipt({ result }) {
         </div>
 
         <div>
-          <span>Created</span>
-          <strong>{new Date(result.createdAt).toLocaleString()}</strong>
+          <span>Execution mode</span>
+          <strong>{result.mode}</strong>
         </div>
-
-        <button type="button" disabled>
-          <ExternalLink size={15} />
-          Arc receipt pending
-        </button>
       </div>
     </section>
   );
-}
-
-function formatRule(rule) {
-  return rule
-    .replace(/([A-Z])/g, " $1")
-    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 export default DecisionReceipt;

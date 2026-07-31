@@ -1,11 +1,11 @@
-import { ShieldCheck, WalletCards } from "lucide-react";
+import { Bot, Radio } from "lucide-react";
 
 function Header({ apiOnline }) {
   return (
     <header className="app-header">
       <div className="brand">
         <div className="brand-icon">
-          <WalletCards size={24} />
+          <Bot size={23} />
         </div>
 
         <div>
@@ -14,13 +14,20 @@ function Header({ apiOnline }) {
         </div>
       </div>
 
-      <div className={`network-status ${apiOnline ? "online" : "offline"}`}>
-        <ShieldCheck size={16} />
-        <span>{apiOnline ? "EduFlow API Online" : "API Offline"}</span>
+      <div
+        className={`network-status ${
+          apiOnline ? "online" : "offline"
+        }`}
+      >
+        <Radio size={14} />
+        <span>
+          {apiOnline
+            ? "Arc Testnet · API online"
+            : "API offline"}
+        </span>
       </div>
     </header>
   );
 }
 
 export default Header;
-

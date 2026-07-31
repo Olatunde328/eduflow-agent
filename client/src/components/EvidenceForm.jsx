@@ -1,117 +1,141 @@
+import { Bot, Play, ScanSearch } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Bot, Play, RotateCcw } from "lucide-react";
 
-const defaultEvidence = {
-  milestoneId: "lesson_001",
-  durationMinutes: 52,
-  learnerConfirmed: true,
-  assessmentScore: 80,
-  requestedAmount: 10,
-  tutorStatement: "Completed algebra lesson and learner assessment.",
+const scenarios = {
+  valid: {
+    durationMinutes: 55,
+    learnerConfirmed: true,
+    assessmentScore: 82,
+    requestedAmount: 10,
+    tutorStatement:
+      "The learner completed the algebra lesson and passed the assessment.",
+  },
+  hold: {
+    durationMinutes: 25,
+    learnerConfirmed: false,
+    assessmentScore: 75,
+    requestedAmount: 10,
+    tutorStatement:
+      "The lesson started, but learner confirmation is still pending.",
+  },
+  escalate: {
+    durationMinutes: 55,
+    learnerConfirmed: true,
+    assessmentScore: 45,
+    requestedAmount: 10,
+    tutorStatement:
+      "The lesson was completed, but the learner needs further support.",
+  },
 };
 
-function EvidenceForm({ agreement, onEvaluate, evaluating }) {
-  const [form, setForm] = useState(defaultEvidence);
+function EvidenceForm({
+  agreement,
+  onEvaluate,
+  onExecute,
+  busy,
+}) {
+  const firstPending =
+    agreement?.milestones?.find(
+      (milestone) => !milestone.paid,
+    ) ?? agreement?.milestones?.[0];
+
+  const [form, setForm] = useState({
+    milestoneId: firstPending?.id ?? "lesson_001",
+    durationMinutes: 55,
+    learnerConfirmed: true,
+    assessmentScore: 82,
+    requestedAmount: 10,
+    tutorStatement:
+      "The learner completed the lesson and demonstrated the expected outcome.",
+  });
 
   useEffect(() => {
-    if (agreement?.milestones?.length && !form.milestoneId) {
+    if (firstPending?.id) {
       setForm((current) => ({
         ...current,
-        milestoneId: agreement.milestones[0].id,
+        milestoneId: firstPending.id,
       }));
     }
-  }, [agreement, form.milestoneId]);
+  }, [firstPending?.id]);
 
-  const updateField = (event) => {
-    const { name, value, type, checked } = event.target;
-
+  function update(name, value) {
     setForm((current) => ({
       ...current,
-      [name]:
-        type === "checkbox"
-          ? checked
-          : type === "number"
-            ? Number(value)
-            : value,
+      [name]: value,
     }));
-  };
+  }
 
-  const loadScenario = (scenario) => {
-    if (scenario === "pay") {
-      setForm({
-        milestoneId: "lesson_001",
-        durationMinutes: 52,
-        learnerConfirmed: true,
-        assessmentScore: 80,
-        requestedAmount: 10,
-        tutorStatement: "Completed algebra lesson and learner assessment.",
-      });
-    }
+  function applyScenario(name) {
+    setForm((current) => ({
+      ...current,
+      ...scenarios[name],
+    }));
+  }
 
-    if (scenario === "hold") {
-      setForm({
-        milestoneId: "lesson_002",
-        durationMinutes: 48,
-        learnerConfirmed: false,
-        assessmentScore: 75,
-        requestedAmount: 10,
-        tutorStatement: "Lesson completed but learner confirmation is missing.",
-      });
-    }
-
-    if (scenario === "reject") {
-      setForm({
-        milestoneId: "lesson_003",
-        durationMinutes: 50,
-        learnerConfirmed: true,
-        assessmentScore: 82,
-        requestedAmount: 15,
-        tutorStatement: "Payment request exceeds the approved lesson amount.",
-      });
-    }
-  };
-
-  const handleSubmit = (event) => {
-    event.preventDefault();
-    onEvaluate(form);
-  };
+  function submit(handler) {
+    handler({
+      ...form,
+      durationMinutes: Number(form.durationMinutes),
+      assessmentScore: Number(form.assessmentScore),
+      requestedAmount: Number(form.requestedAmount),
+    });
+  }
 
   return (
     <section className="panel evidence-panel">
       <div className="panel-heading">
         <div>
-          <span className="eyebrow">Agent workspace</span>
-          <h2>Submit lesson evidence</h2>
+          <span className="eyebrow">Lesson evidence</span>
+          <h2>SkillPay evaluation</h2>
         </div>
 
-        <Bot size={25} />
+        <Bot size={22} />
       </div>
 
+      <p className="panel-description">
+        Test the policy engine first, then explicitly execute an approved
+        milestone through Circle.
+      </p>
+
       <div className="scenario-buttons">
-        <button type="button" onClick={() => loadScenario("pay")}>
-          Valid payment
+        <button
+          type="button"
+          onClick={() => applyScenario("valid")}
+        >
+          Valid lesson
         </button>
 
-        <button type="button" onClick={() => loadScenario("hold")}>
+        <button
+          type="button"
+          onClick={() => applyScenario("hold")}
+        >
           Missing evidence
         </button>
 
-        <button type="button" onClick={() => loadScenario("reject")}>
-          Overspending attempt
+        <button
+          type="button"
+          onClick={() => applyScenario("escalate")}
+        >
+          Low score
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="evidence-form">
+      <div className="evidence-form">
         <label>
           Milestone
           <select
-            name="milestoneId"
             value={form.milestoneId}
-            onChange={updateField}
+            onChange={(event) =>
+              update("milestoneId", event.target.value)
+            }
           >
-            {agreement?.milestones?.map((milestone) => (
-              <option key={milestone.id} value={milestone.id}>
-                Lesson {milestone.sequence}: {milestone.title}
+            {agreement.milestones.map((milestone) => (
+              <option
+                key={milestone.id}
+                value={milestone.id}
+                disabled={milestone.paid}
+              >
+                {milestone.title} · {milestone.status}
               </option>
             ))}
           </select>
@@ -123,10 +147,14 @@ function EvidenceForm({ agreement, onEvaluate, evaluating }) {
             <div className="input-with-unit">
               <input
                 type="number"
-                name="durationMinutes"
                 min="0"
                 value={form.durationMinutes}
-                onChange={updateField}
+                onChange={(event) =>
+                  update(
+                    "durationMinutes",
+                    event.target.value,
+                  )
+                }
               />
               <span>minutes</span>
             </div>
@@ -137,11 +165,15 @@ function EvidenceForm({ agreement, onEvaluate, evaluating }) {
             <div className="input-with-unit">
               <input
                 type="number"
-                name="assessmentScore"
                 min="0"
                 max="100"
                 value={form.assessmentScore}
-                onChange={updateField}
+                onChange={(event) =>
+                  update(
+                    "assessmentScore",
+                    event.target.value,
+                  )
+                }
               />
               <span>%</span>
             </div>
@@ -153,11 +185,16 @@ function EvidenceForm({ agreement, onEvaluate, evaluating }) {
           <div className="input-with-unit">
             <input
               type="number"
-              name="requestedAmount"
               min="0.01"
+              max="10"
               step="0.01"
               value={form.requestedAmount}
-              onChange={updateField}
+              onChange={(event) =>
+                update(
+                  "requestedAmount",
+                  event.target.value,
+                )
+              }
             />
             <span>USDC</span>
           </div>
@@ -166,48 +203,56 @@ function EvidenceForm({ agreement, onEvaluate, evaluating }) {
         <label className="confirmation-control">
           <input
             type="checkbox"
-            name="learnerConfirmed"
             checked={form.learnerConfirmed}
-            onChange={updateField}
+            onChange={(event) =>
+              update(
+                "learnerConfirmed",
+                event.target.checked,
+              )
+            }
           />
 
-          <span>
+          <div>
             <strong>Learner confirmed completion</strong>
-            <small>This agreement requires learner confirmation.</small>
-          </span>
+            <small>
+              Required before the agent can authorize payment.
+            </small>
+          </div>
         </label>
 
         <label>
           Tutor statement
           <textarea
-            name="tutorStatement"
             rows="4"
-            maxLength="1000"
             value={form.tutorStatement}
-            onChange={updateField}
+            onChange={(event) =>
+              update("tutorStatement", event.target.value)
+            }
           />
         </label>
 
         <div className="form-actions">
           <button
-            type="button"
             className="secondary-button"
-            onClick={() => setForm(defaultEvidence)}
+            type="button"
+            disabled={busy}
+            onClick={() => submit(onEvaluate)}
           >
-            <RotateCcw size={17} />
-            Reset
+            <ScanSearch size={17} />
+            Evaluate only
           </button>
 
           <button
-            type="submit"
             className="primary-button"
-            disabled={evaluating}
+            type="button"
+            disabled={busy}
+            onClick={() => submit(onExecute)}
           >
             <Play size={17} />
-            {evaluating ? "Agent evaluating..." : "Run SkillPay Agent"}
+            Execute approved payment
           </button>
         </div>
-      </form>
+      </div>
     </section>
   );
 }
