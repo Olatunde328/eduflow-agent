@@ -174,7 +174,7 @@ export async function executeMilestonePayment({
   const idempotencyKey = randomUUID();
 
   const response =
-    await client.createDeveloperTransactionContractExecution({
+    await client.createContractExecutionTransaction({
       idempotencyKey,
       walletId,
       contractAddress,
