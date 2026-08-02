@@ -1,8 +1,6 @@
 import "dotenv/config";
 import { createHash } from "node:crypto";
-import {
-  initiateDeveloperControlledWalletsClient,
-} from "@circle-fin/developer-controlled-wallets";
+import * as CircleWalletsSdk from "@circle-fin/developer-controlled-wallets";
 
 const FINAL_STATES = new Set([
   "COMPLETE",
@@ -56,7 +54,25 @@ function toUsdcBaseUnits(amount) {
   return String(baseUnits);
 }
 
+function getCircleClientFactory() {
+  const factory =
+    CircleWalletsSdk.initiateDeveloperControlledWalletsClient ??
+    CircleWalletsSdk.default?.initiateDeveloperControlledWalletsClient ??
+    CircleWalletsSdk.default;
+
+  if (typeof factory !== "function") {
+    throw new Error(
+      "Circle SDK client factory is unavailable in this runtime.",
+    );
+  }
+
+  return factory;
+}
+
 function createCircleClient() {
+  const initiateDeveloperControlledWalletsClient =
+    getCircleClientFactory();
+
   return initiateDeveloperControlledWalletsClient({
     apiKey: requireEnvironment("CIRCLE_API_KEY"),
     entitySecret: requireEnvironment("CIRCLE_ENTITY_SECRET"),
