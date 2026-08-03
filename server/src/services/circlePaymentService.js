@@ -1,5 +1,8 @@
 import "dotenv/config";
 import { createHash } from "node:crypto";
+import { createRequire } from "node:module";
+
+const require = createRequire(import.meta.url);
 
 const FINAL_STATES = new Set([
   "COMPLETE",
@@ -53,8 +56,8 @@ function toUsdcBaseUnits(amount) {
   return String(baseUnits);
 }
 
-async function createCircleClient() {
-  const CircleWalletsSdk = await import(
+function createCircleClient() {
+  const CircleWalletsSdk = require(
     "@circle-fin/developer-controlled-wallets"
   );
 
@@ -65,7 +68,7 @@ async function createCircleClient() {
 
   if (typeof factory !== "function") {
     throw new Error(
-      "Circle SDK client factory is unavailable in this runtime.",
+      "Circle SDK CommonJS client factory is unavailable.",
     );
   }
 
