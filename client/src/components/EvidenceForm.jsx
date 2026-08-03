@@ -129,13 +129,13 @@ function EvidenceForm({
               update("milestoneId", event.target.value)
             }
           >
-            {agreement.milestones.map((milestone) => (
+            {(agreement?.milestones ?? []).map((milestone) => (
               <option
                 key={milestone.id}
                 value={milestone.id}
                 disabled={milestone.paid}
               >
-                {milestone.title} · {milestone.status}
+                {milestone.title} Â· {milestone.status}
               </option>
             ))}
           </select>
