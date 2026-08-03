@@ -1,6 +1,5 @@
 import "dotenv/config";
 import { createHash } from "node:crypto";
-import * as CircleWalletsSdk from "@circle-fin/developer-controlled-wallets";
 
 const FINAL_STATES = new Set([
   "COMPLETE",
@@ -54,7 +53,11 @@ function toUsdcBaseUnits(amount) {
   return String(baseUnits);
 }
 
-function getCircleClientFactory() {
+async function createCircleClient() {
+  const CircleWalletsSdk = await import(
+    "@circle-fin/developer-controlled-wallets"
+  );
+
   const factory =
     CircleWalletsSdk.initiateDeveloperControlledWalletsClient ??
     CircleWalletsSdk.default?.initiateDeveloperControlledWalletsClient ??
@@ -66,19 +69,11 @@ function getCircleClientFactory() {
     );
   }
 
-  return factory;
-}
-
-function createCircleClient() {
-  const initiateDeveloperControlledWalletsClient =
-    getCircleClientFactory();
-
-  return initiateDeveloperControlledWalletsClient({
+  return factory({
     apiKey: requireEnvironment("CIRCLE_API_KEY"),
     entitySecret: requireEnvironment("CIRCLE_ENTITY_SECRET"),
   });
 }
-
 function normalizeTransaction(transaction) {
   const transactionHash =
     transaction?.txHash ??
@@ -192,7 +187,7 @@ export async function executeMilestonePayment({
     }),
   );
 
-  const client = createCircleClient();
+  const client = await createCircleClient();
 
   console.log("");
   console.log("Submitting Circle contract execution");
