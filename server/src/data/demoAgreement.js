@@ -1,18 +1,18 @@
 export const demoAgreement = {
   id: "agr_demo_math_001",
   onchainAgreementId: 2,
-  title: "Mathematics Improvement Programme",
+  title: "STEM Excellence Tutoring Agreement",
   subject: "Mathematics",
 
   payer: {
-    name: "Demo Parent",
+    name: "Sarah Johnson",
     walletAddress:
       process.env.EDUFLOW_PAYER_ADDRESS ??
       "0x5A373041F989348753e37C1BC5a69971604F49d3",
   },
 
   provider: {
-    name: "Demo Mathematics Tutor",
+    name: "BrightPath Mathematics Academy",
     walletAddress:
       process.env.CIRCLE_PROVIDER_ADDRESS ??
       "0x28A2543f6c92419D9955f18de7c80147e24483e9",
