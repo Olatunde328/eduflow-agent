@@ -135,7 +135,7 @@ function EvidenceForm({
                 value={milestone.id}
                 disabled={milestone.paid}
               >
-                {milestone.title} Â· {milestone.status}
+                {milestone.title} Ã‚Â· {milestone.status}
               </option>
             ))}
           </select>
