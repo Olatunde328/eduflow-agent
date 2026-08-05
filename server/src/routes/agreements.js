@@ -1,3 +1,4 @@
+import { hydrateAgreementFromArc } from "../services/arcAgreementStateService.js";
 import { Router } from "express";
 import { z } from "zod";
 import {
@@ -51,11 +52,20 @@ function evaluatePayload(payload) {
   };
 }
 
-router.get("/demo", (req, res) => {
-  return res.json({
-    success: true,
-    agreement: getPublicAgreement(),
-  });
+router.get("/demo", async (req, res, next) => {
+  try {
+    const agreement =
+      await hydrateAgreementFromArc(
+        demoAgreement,
+      );
+
+    return res.json({
+      success: true,
+      agreement,
+    });
+  } catch (error) {
+    return next(error);
+  }
 });
 
 router.post("/demo/evaluate", (req, res) => {
