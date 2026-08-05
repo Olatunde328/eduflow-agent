@@ -52,6 +52,49 @@ function evaluatePayload(payload) {
   };
 }
 
+async function hydrateAgreementAfterSettlement(
+  paidMilestoneId,
+) {
+  let lastAgreement = null;
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= 8; attempt += 1) {
+    try {
+      lastAgreement =
+        await hydrateAgreementFromArc(
+          demoAgreement,
+        );
+
+      const paidMilestone =
+        lastAgreement.milestones.find(
+          (milestone) =>
+            milestone.id === paidMilestoneId,
+        );
+
+      if (paidMilestone?.paid) {
+        return lastAgreement;
+      }
+    } catch (error) {
+      lastError = error;
+    }
+
+    await new Promise((resolve) =>
+      setTimeout(resolve, 750),
+    );
+  }
+
+  if (lastAgreement) {
+    return lastAgreement;
+  }
+
+  throw (
+    lastError ??
+    new Error(
+      "Arc state could not be synchronized after settlement.",
+    )
+  );
+}
+
 router.get("/demo", async (req, res, next) => {
   try {
     const agreement =
@@ -208,7 +251,7 @@ router.post("/demo/execute", async (req, res, next) => {
         decision,
         paymentSubmitted: true,
         transaction,
-        agreement: getPublicAgreement(),
+        agreement: await hydrateAgreementAfterSettlement(milestone.id),
         createdAt: new Date().toISOString(),
       });
     } catch (error) {
